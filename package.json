@@ -1,0 +1,142 @@
+{
+  "name": "semantic-kg-extension",
+  "displayName": "Semantic Code Knowledge Graph",
+  "description": "Builds a local knowledge graph of your codebase and exposes it to AI via MCP",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "semanticKG.rebuildGraph",
+        "title": "Semantic KG: Rebuild Knowledge Graph"
+      },
+      {
+        "command": "semanticKG.openGraphExplorer",
+        "title": "Semantic KG: Open Graph Explorer"
+      },
+      {
+        "command": "semanticKG.openContextInspector",
+        "title": "Semantic KG: Open Context Inspector"
+      },
+      {
+        "command": "semanticKG.suggestCommitMessage",
+        "title": "Semantic KG: Suggest Commit Message"
+      }
+    ],
+    "configuration": {
+      "title": "Semantic Knowledge Graph",
+      "properties": {
+        "semanticKG.llmProvider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic",
+            "ollama"
+          ],
+          "default": "anthropic",
+          "description": "LLM provider for docstring generation and commit messages"
+        },
+        "semanticKG.llmApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the configured LLM provider"
+        },
+        "semanticKG.llmModel": {
+          "type": "string",
+          "default": "claude-sonnet-4-20250514",
+          "description": "Model name to use"
+        },
+        "semanticKG.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama base URL (only used when provider is ollama)"
+        },
+        "semanticKG.mcpPort": {
+          "type": "number",
+          "default": 3579,
+          "description": "Port for the local MCP server"
+        },
+        "semanticKG.autoRebuildOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically update the graph when files are saved"
+        },
+        "semanticKG.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/dist/**",
+            "**/out/**",
+            "**/__pycache__/**"
+          ],
+          "description": "Glob patterns to exclude from indexing"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "semanticKG",
+          "title": "Knowledge Graph",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "semanticKG": [
+        {
+          "type": "webview",
+          "id": "semanticKG.graphExplorer",
+          "name": "Graph Explorer"
+        },
+        {
+          "type": "webview",
+          "id": "semanticKG.contextInspector",
+          "name": "Context Inspector"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@xenova/transformers": "^2.17.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "glob": "^10.3.10",
+    "minimatch": "^9.0.4",
+    "simple-git": "^3.22.0",
+    "sql.js": "^1.14.1",
+    "web-tree-sitter": "^0.22.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.5",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  }
+}
