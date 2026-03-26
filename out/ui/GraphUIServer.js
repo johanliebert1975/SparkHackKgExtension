@@ -515,7 +515,7 @@ function renderSidebar(node, { callers, callees }, blast) {
   html += '<span class="nc-type" style="background:' + typeColor + '33;color:' + typeColor + '">' + node.type + '</span>';
 
   if (mods) html += rowHtml('Modifiers', mods);
-  html += rowHtml('File', node.filePath.split(/[/\\]/).slice(-2).join('/'));
+  html += rowHtml('File', node.filePath.replace(/\\\\/g, '/').split('/').slice(-2).join('/'));
   if (node.className) html += rowHtml('Class', node.className);
   if (node.packageName) html += rowHtml('Package', node.packageName);
   html += rowHtml('Lines', node.startLine + ' – ' + node.endLine);
@@ -528,21 +528,21 @@ function renderSidebar(node, { callers, callees }, blast) {
   if (callees.length) {
     html += '<div class="section-title">Calls (' + callees.length + ')</div>';
     html += callees.map(n =>
-      '<span class="chip callee" onclick="selectNode(\'' + esc(n.id) + '\')">' + esc(n.name) + '</span>'
+      '<span class="chip callee" onclick="selectNode(&quot;' + esc(n.id) + '&quot;)">' + esc(n.name) + '</span>'
     ).join('');
   }
 
   if (callers.length) {
     html += '<div class="section-title" style="margin-top:10px">Called by (' + callers.length + ')</div>';
     html += callers.map(n =>
-      '<span class="chip caller" onclick="selectNode(\'' + esc(n.id) + '\')">' + esc(n.name) + '</span>'
+      '<span class="chip caller" onclick="selectNode(&quot;' + esc(n.id) + '&quot;)">' + esc(n.name) + '</span>'
     ).join('');
   }
 
   if (blast.length) {
     html += '<div class="section-title" style="margin-top:10px">Blast radius (' + blast.length + ')</div>';
     html += blast.slice(0, 12).map(n =>
-      '<span class="chip blast" onclick="selectNode(\'' + esc(n.id) + '\')">' + esc(n.name) + '</span>'
+      '<span class="chip blast" onclick="selectNode(&quot;' + esc(n.id) + '&quot;)">' + esc(n.name) + '</span>'
     ).join('');
     if (blast.length > 12) html += '<span class="chip blast">+' + (blast.length-12) + ' more</span>';
   }
@@ -591,10 +591,10 @@ function renderSearchResults(results) {
   if (!results.length) { searchResults.style.display = 'none'; return; }
   const col = n => NODE_COLORS[n.type] ?? '#8b949e';
   searchResults.innerHTML = results.slice(0, 15).map(n =>
-    '<div class="sr-item" onclick="selectNode(\'' + esc(n.id) + '\');searchResults.style.display=\'none\';searchInput.value=\'\'">' +
+    '<div class="sr-item" onclick="selectNode(&quot;' + esc(n.id) + '&quot;); searchResults.style.display = &quot;none&quot;; searchInput.value = &quot;&quot;">' +
       '<span class="sr-type" style="background:' + col(n) + '33;color:' + col(n) + '">' + n.type + '</span>' +
       '<span class="sr-name">' + esc(n.name) + '</span>' +
-      '<span class="sr-path">' + esc(n.filePath.split(/[/\\]/).slice(-2).join('/')) + '</span>' +
+      '<span class="sr-path">' + esc(n.filePath.replace(/\\\\/g, '/').split('/').slice(-2).join('/')) + '</span>' +
     '</div>'
   ).join('');
   searchResults.style.display = 'block';

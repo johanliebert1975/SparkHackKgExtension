@@ -88,10 +88,14 @@ class CallResolver {
     async ensureInitialized() {
         if (this.initialized)
             return;
-        const TreeSitter = await Promise.resolve().then(() => __importStar(require('web-tree-sitter')));
-        const wasmPath = path.join(this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
-        await TreeSitter.default.init({ locateFile: () => wasmPath });
-        this.Parser = TreeSitter.default;
+        const ParserClass = require('web-tree-sitter');
+        // Emscripten deletes .init() after it runs successfully the first time.
+        // If it exists, load the WASM. If it's gone, it's already loaded!
+        if (typeof ParserClass.init === 'function') {
+            const wasmPath = path.join(this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
+            await ParserClass.init({ locateFile: () => wasmPath });
+        }
+        this.Parser = ParserClass;
         this.initialized = true;
     }
     /**
