@@ -78,7 +78,7 @@ export class MCPServer {
     });
 
     await new Promise<void>((resolve, reject) => {
-      this.server!.listen(this.port, '127.0.0.1', () => resolve());
+      this.server!.listen(this.port, '0.0.0.0', () => resolve());
       this.server!.on('error', reject);
     });
   }
