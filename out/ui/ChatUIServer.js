@@ -189,7 +189,7 @@ class ChatUIServer {
             <h2 class="font-medium text-sm text-gray-300">Codebase Explorer</h2>
         </header>
 
-        <div id="chat-container" class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-8 pb-40 scroll-smooth">
+        <div id="chat-container" class="flex-1 overflow-y-auto p-4 sm:p-8 space-y-8 scroll-smooth">
             <div class="flex gap-4 max-w-3xl mx-auto">
                 <div class="w-8 h-8 rounded bg-surface border border-borderPrimary flex items-center justify-center shrink-0">
                     <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
@@ -201,7 +201,7 @@ class ChatUIServer {
             </div>
         </div>
 
-        <div class="absolute bottom-0 w-full bg-gradient-to-t from-background via-background to-transparent pt-12 pb-6 px-4 sm:px-6">
+        <div class="flex-shrink-0 bg-gradient-to-t from-background via-background to-transparent pt-12 pb-6 px-4 sm:px-6 border-t border-borderPrimary">
             <div class="max-w-3xl mx-auto">
                 <div class="bg-surface border border-borderPrimary rounded-xl flex items-end p-1.5 focus-within:border-gray-500 transition-colors shadow-2xl">
                     <textarea id="query-input" rows="1" placeholder="Describe a feature or ask about logic..." class="w-full bg-transparent border-none focus:ring-0 text-gray-200 resize-none py-3 px-3 max-h-40 text-sm font-sans"></textarea>
@@ -221,7 +221,23 @@ class ChatUIServer {
         input.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
+            if(this.value.trim() === '') this.style.height = 'auto';
         });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        sendBtn.addEventListener('click', handleSend);
+
+        function scrollToBottom() {
+            setTimeout(() => {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }, 50);
+        }
 
         function addUserMessage(text) {
             const div = document.createElement('div');

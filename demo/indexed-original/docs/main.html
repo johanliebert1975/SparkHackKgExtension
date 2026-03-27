@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>main.py — Entry Point</title>
+    <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+    <div class="doc-container">
+        <h1>Module: <code>main</code></h1>
+        <p class="file-path">📁 main.py</p>
+        <p class="docstring">Main entry point — orchestrates calculator operations.</p>
+
+        <h2>Functions:</h2>
+        <div class="method">
+            <h3><code>main()</code></h3>
+            <p>Initialize calculator and run demo operations.</p>
+            <p><strong>Steps:</strong></p>
+            <ol>
+                <li>Create Logger with config.LOG_LEVEL</li>
+                <li>Initialize Calculator with logger</li>
+                <li>Initialize AdvancedOps with calculator</li>
+                <li>Run basic operations (add, subtract)</li>
+                <li>Run advanced operations (sqrt_safe, power_safe)</li>
+                <li>Log completion</li>
+            </ol>
+        </div>
+
+        <h2>Graph Relationships:</h2>
+        <ul>
+            <li><strong>CALLS:</strong> logger.Logger()</li>
+            <li><strong>CALLS:</strong> calculator.Calculator()</li>
+            <li><strong>CALLS:</strong> operations.AdvancedOps()</li>
+            <li><strong>CALLS:</strong> calculator.Calculator.add()</li>
+            <li><strong>CALLS:</strong> calculator.Calculator.subtract()</li>
+            <li><strong>CALLS:</strong> operations.AdvancedOps.sqrt_safe()</li>
+            <li><strong>CALLS:</strong> operations.AdvancedOps.power_safe()</li>
+            <li><strong>IMPORTS:</strong> config.Config</li>
+        </ul>
+
+        <h2>Full Call Flow:</h2>
+        <pre><code>main()
+  ├── Logger(Config.LOG_LEVEL)
+  ├── Calculator(logger)
+  ├── AdvancedOps(calc)
+  ├── calc.add(10, 5)
+  │   ├── validate_number(10)
+  │   ├── validate_number(5)
+  │   └── logger.info("add...")
+  ├── calc.subtract(10, 3)
+  │   ├── validate_number(10)
+  │   ├── validate_number(3)
+  │   └── logger.info("subtract...")
+  ├── adv_ops.sqrt_safe(16)
+  │   ├── validate_number(16)
+  │   └── math.sqrt(16)
+  └── adv_ops.power_safe(2, 3)
+      ├── validate_number(2)
+      ├── validate_number(3)
+      └── math.pow(2, 3)
+</code></pre>
+
+        <p><a href="../index.html">← Back to Documentation Hub</a></p>
+    </div>
+</body>
+</html>

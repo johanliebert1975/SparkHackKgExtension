@@ -467,21 +467,23 @@ function renderGraph() {
 
   // Tick
   simulation.on('tick', () => {
-    linkSel
+    // Dynamically select elements so newly filtered nodes/edges are animated!
+    d3.selectAll('.links line')
       .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
 
-    edgeLabelSel
+    d3.selectAll('.edge-labels text')
       .attr('x', d => ((d.source.x ?? 0) + (d.target.x ?? 0)) / 2)
       .attr('y', d => ((d.source.y ?? 0) + (d.target.y ?? 0)) / 2 - 4);
 
-    nodeG.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+    d3.selectAll('.node-g')
+      .attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
   });
 
   // Click on background → clear highlight
   svg.on('click', () => {
     highlightedIds = null;
-    renderGraph();
+    updateHighlighting();  // Just update highlights, don't re-render
     document.getElementById('sidebar-content').innerHTML =
       '<div class="empty-state">Click a node to inspect it.</div>';
   });
@@ -494,16 +496,184 @@ function selectNode(id) {
     .then(({ node, neighbours, blast }) => {
       if (!node) return;
 
-      // Highlight: selected + callers + callees + blast
+      // Highlight: selected + callers + callees + blast (don't re-render, just update)
       const ids = new Set([id,
         ...neighbours.callers.map(n => n.id),
         ...neighbours.callees.map(n => n.id),
         ...blast.map(n => n.id),
       ]);
       highlightedIds = ids;
-      renderGraph();
+      updateHighlighting();  // Update highlighting without full re-render
       renderSidebar(node, neighbours, blast);
     });
+}
+
+// Update node and edge highlighting without re-rendering the entire graph
+function updateHighlighting() {
+  const highlighted = highlightedIds;
+  
+  // Update node circles
+  d3.selectAll('.node-g circle')
+    .attr('fill-opacity', d => {
+      if (!highlighted) return 0.85;
+      return highlighted.has(d.id) ? 1 : 0.15;
+    })
+    .attr('stroke-width', d => highlighted?.has(d.id) ? 2.5 : 1);
+  
+  // Update node labels
+  d3.selectAll('.node-g text')
+    .attr('fill', d => {
+      if (!highlighted) return d.type === 'file' ? '#8b949e' : '#c9d1d9';
+      return highlighted.has(d.id) ? '#ffffff' : '#30363d';
+    });
+  
+  // Update edges  
+  d3.selectAll('.links line')
+    .attr('stroke-opacity', d => {
+      if (!highlighted) return d.type === 'CONTAINS' ? 0.2 : 0.55;
+      return (highlighted.has(d.source?.id ?? d.source) || highlighted.has(d.target?.id ?? d.target))
+        ? 0.8 : 0.05;
+    });
+  
+  // Update edge labels
+  d3.selectAll('.edge-labels text')
+    .attr('opacity', d => {
+      if (!highlighted) return 0.6;
+      return (highlighted.has(d.source?.id ?? d.source) || highlighted.has(d.target?.id ?? d.target))
+        ? 1 : 0.1;
+    });
+}
+
+// Update graph when filters change — preserves node positions and D3 simulation state
+function updateGraphFilters() {
+  if (!simulation || !allNodes.length) return;
+
+  const visibleTypes = activeTypes;
+  const visibleEdges = activeEdges;
+
+  const filteredNodes = allNodes.filter(n => visibleTypes.has(n.type));
+  const nodeSet = new Set(filteredNodes.map(n => n.id));
+  
+  const filteredEdges = allEdges.filter(e =>
+    visibleEdges.has(e.relationType) &&
+    nodeSet.has(e.sourceId) &&
+    nodeSet.has(e.targetId)
+  );
+
+  // Create D3-compatible link objects with proper key function
+  const d3links = filteredEdges.map(e => ({
+    source: e.sourceId,
+    target: e.targetId,
+    type: e.relationType,
+    _key: e.sourceId + '→' + e.targetId
+  }));
+
+  // Update the force simulation's nodes and links FIRST
+  simulation.nodes(filteredNodes);
+  simulation.force('link', d3.forceLink(d3links)
+    .id(d => d.id)
+    .distance(d => d.type === 'CONTAINS' ? 50 : d.type === 'CALLS' ? 90 : 70)
+    .strength(d => d.type === 'CONTAINS' ? 0.6 : 0.3));
+  simulation.force('collision', d3.forceCollide(d => NODE_RADIUS[d.type] + 12));
+
+  // ── Update nodes with proper enter/update/exit pattern ────────────────────────
+  const nodeGSelection = d3.select('.nodes').selectAll('.node-g').data(filteredNodes, d => d.id);
+  nodeGSelection.exit().remove();
+  
+  // Create new node groups for filtered-in nodes
+  const nodeGEnter = nodeGSelection.enter().append('g')
+    .attr('class', 'node-g')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (e, d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; })
+    )
+    .on('click',     (e, d) => { e.stopPropagation(); selectNode(d.id); })
+    .on('mouseover', (e, d) => showTooltip(e, d))
+    .on('mousemove', (e)    => moveTooltip(e))
+    .on('mouseout',  ()     => { tooltip.style.opacity = 0; });
+
+  // Add circles to new nodes
+  nodeGEnter.append('circle')
+    .attr('r', d => NODE_RADIUS[d.type] ?? 6)
+    .attr('fill', d => {
+      if (d.communityId > 0) return COM_PALETTE[d.communityId % COM_PALETTE.length];
+      return NODE_COLORS[d.type] ?? '#8b949e';
+    })
+    .attr('stroke', d => NODE_COLORS[d.type] ?? '#8b949e')
+    .attr('stroke-width', 1)
+    .attr('stroke-opacity', 0.8);
+
+  // Add text labels to new nodes
+  nodeGEnter.append('text')
+    .attr('dx', d => NODE_RADIUS[d.type] + 3)
+    .attr('dy', '0.35em')
+    .attr('font-size', d => {
+      if (d.type === 'class' || d.type === 'interface') return '10px';
+      if (d.type === 'file') return '8px';
+      return '9px';
+    })
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .attr('font-weight', d => (d.type === 'class' || d.type === 'interface') ? '600' : '400')
+    .text(d => {
+      const label = d.name ?? d.id.split('/').pop() ?? '';
+      return label.length > 22 ? label.slice(0, 20) + '…' : label;
+    });
+
+  // Merge and update all nodes (both new and existing)
+  const nodeGMerged = nodeGEnter.merge(nodeGSelection);
+  nodeGMerged.select('circle')
+    .attr('fill-opacity', d => {
+      if (!highlightedIds) return 0.85;
+      return highlightedIds.has(d.id) ? 1 : 0.15;
+    })
+    .attr('stroke-width', d => highlightedIds?.has(d.id) ? 2.5 : 1);
+  
+  nodeGMerged.select('text')
+    .attr('fill', d => {
+      if (!highlightedIds) return d.type === 'file' ? '#8b949e' : '#c9d1d9';
+      return highlightedIds.has(d.id) ? '#ffffff' : '#30363d';
+    });
+
+  // ── Update edges with proper enter/update/exit pattern ────────────────────────
+  const linkSelection = d3.select('.links').selectAll('line').data(d3links, d => d._key);
+  linkSelection.exit().remove();
+  
+  // Create new edge lines for filtered-in edges
+  const linkEnter = linkSelection.enter().append('line')
+    .attr('stroke', d => EDGE_COLORS[d.type] ?? '#8b949e')
+    .attr('stroke-width', d => d.type === 'CALLS' ? 1.5 : 1)
+    .attr('marker-end', d => 'url(#arr-' + d.type + ')');
+
+  // Merge and update all edges
+  linkEnter.merge(linkSelection).attr('stroke-opacity', d => {
+    if (!highlightedIds) return d.type === 'CONTAINS' ? 0.2 : 0.55;
+    return (highlightedIds.has(d.source?.id ?? d.source) || highlightedIds.has(d.target?.id ?? d.target))
+      ? 0.8 : 0.05;
+  });
+
+  // ── Update edge labels with proper enter/update/exit pattern ────────────────────
+  const edgeLabelSelection = d3.select('.edge-labels').selectAll('text')
+    .data(d3links.filter(l => l.type !== 'CONTAINS'), d => d._key);
+  edgeLabelSelection.exit().remove();
+  
+  // Create new edge labels for filtered-in edges
+  const edgeLabelEnter = edgeLabelSelection.enter().append('text')
+    .attr('fill', d => EDGE_COLORS[d.type] ?? '#8b949e')
+    .attr('font-size', '8px')
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .text(d => d.type);
+
+  // Merge and update all edge labels
+  edgeLabelEnter.merge(edgeLabelSelection).attr('opacity', d => {
+    if (!highlightedIds) return 0.6;
+    return (highlightedIds.has(d.source?.id ?? d.source) || highlightedIds.has(d.target?.id ?? d.target))
+      ? 1 : 0.1;
+  });
+
+  // Warm restart
+  simulation.alpha(0.3).restart();
 }
 
 function renderSidebar(node, { callers, callees }, blast) {
@@ -612,14 +782,15 @@ document.querySelectorAll('.filter-btn[data-type]').forEach(btn => {
     const type = btn.dataset.type;
     if (type === 'all') {
       activeTypes = new Set(['file','class','function','method','interface']);
-      document.querySelectorAll('.filter-btn[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === 'all'));
+      // FIX: Turn ALL buttons on visually
+      document.querySelectorAll('.filter-btn[data-type]').forEach(b => b.classList.add('active'));
     } else {
       document.querySelector('.filter-btn[data-type="all"]').classList.remove('active');
       if (activeTypes.has(type)) activeTypes.delete(type);
       else activeTypes.add(type);
       btn.classList.toggle('active', activeTypes.has(type));
     }
-    renderGraph();
+    updateGraphFilters();  // Update without destroying simulation
   });
 });
 
@@ -629,7 +800,7 @@ document.querySelectorAll('.filter-btn[data-edge]').forEach(btn => {
     if (activeEdges.has(edge)) activeEdges.delete(edge);
     else activeEdges.add(edge);
     btn.classList.toggle('active', activeEdges.has(edge));
-    renderGraph();
+    updateGraphFilters();  // Update without destroying simulation
   });
 });
 

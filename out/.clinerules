@@ -1,0 +1,10 @@
+# CORE DIRECTIVE: LOCAL KNOWLEDGE GRAPH
+You have access to a custom, local codebase Knowledge Graph API running on http://localhost:3579. 
+Before making large refactors, answering architectural questions, or trying to find where specific logic lives, you MUST query this API using `curl` to gain context instead of reading files line-by-line.
+
+# HOW TO USE YOUR TOOLS
+1. To see the available tools, run: `curl -s http://localhost:3579/mcp/manifest`
+2. To use a tool, make a POST request. Example:
+   `curl -X POST http://localhost:3579/mcp -H "Content-Type: application/json" -d '{"tool":"search_intent","params":{"query":"API keys"}}'`
+
+Treat this Knowledge Graph as your primary search engine for this workspace.

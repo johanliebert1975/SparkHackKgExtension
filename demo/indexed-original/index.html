@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator Project — Documentation & Chat</title>
+    <link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="dark-theme">
+    <div class="container">
+        <header>
+            <h1>📊 Calculator Project</h1>
+            <p class="subtitle">Semantic Knowledge Graph Documentation</p>
+        </header>
+
+        <main>
+            <section class="chat-panel">
+                <h2>Query the Codebase</h2>
+                <div id="chat-messages" class="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="query" placeholder="Ask about any function or module...">
+                    <button onclick="sendQuery()">Send</button>
+                </div>
+            </section>
+
+            <aside class="docs-panel">
+                <h3>📚 Documentation Index</h3>
+                <ul id="doc-index"></ul>
+            </aside>
+        </main>
+    </div>
+
+    <script src="assets/chat.js"></script>
+    <script>
+        // Load documentation index
+        fetch('docs/index.json')
+            .then(r => r.json())
+            .then(data => {
+                const list = document.getElementById('doc-index');
+                data.files.forEach(doc => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<a href="docs/${doc.file}">${doc.name}</a>`;
+                    list.appendChild(li);
+                });
+            });
+    </script>
+</body>
+</html>
