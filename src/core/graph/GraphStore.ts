@@ -228,6 +228,40 @@ export class GraphStore {
     return rows.length ? this.rowToNode(rows[0]) : null;
   }
 
+  // ── Utility operations ─────────────────────────────────────────────────────
+
+  /**
+   * Generates a clickable link/URI for a specific node to open it in an editor.
+   * * @param id The ID of the CodeNode
+   * @param editor The target editor/environment (defaults to 'vscode')
+   * @returns A formatted string link, or null if the node doesn't exist
+   */
+  getNodeEditorLink(id: string, editor: 'vscode' | 'terminal' | 'github' = 'vscode'): string | null {
+    const node = this.getNode(id);
+    if (!node) return null;
+
+    // Resolve absolute path if your UI requires it (assuming _workspaceRoot is stored)
+    // If your filePath is already absolute, you can skip path.resolve
+    const absolutePath = path.resolve(this.dbPath, '../../', node.filePath); // Adjust based on your workspace root logic
+
+    switch (editor) {
+      case 'vscode':
+        // Example: vscode://file/c:/projects/my-app/src/main.ts:42
+        return `vscode://file/${absolutePath}:${node.startLine}`;
+        
+      case 'terminal':
+        // Example: src/main.ts:42
+        return `${node.filePath}:${node.startLine}`;
+        
+      case 'github':
+        // Example: src/main.ts#L42
+        return `${node.filePath}#L${node.startLine}`;
+        
+      default:
+        return `${node.filePath}:${node.startLine}`;
+    }
+  }
+
   getNodesByFile(filePath: string): CodeNode[] {
     return this.query<any>(`SELECT * FROM nodes WHERE file_path=?`, [filePath]).map(r => this.rowToNode(r));
   }

@@ -48,6 +48,13 @@ export declare class GraphStore {
     updateCommunityId(nodeId: string, communityId: number): void;
     removeFile(filePath: string): void;
     getNode(id: string): CodeNode | null;
+    /**
+     * Generates a clickable link/URI for a specific node to open it in an editor.
+     * * @param id The ID of the CodeNode
+     * @param editor The target editor/environment (defaults to 'vscode')
+     * @returns A formatted string link, or null if the node doesn't exist
+     */
+    getNodeEditorLink(id: string, editor?: 'vscode' | 'terminal' | 'github'): string | null;
     getNodesByFile(filePath: string): CodeNode[];
     getNeighbours(nodeId: string): {
         callers: CodeNode[];
