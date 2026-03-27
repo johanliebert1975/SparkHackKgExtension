@@ -3,35 +3,93 @@
   "displayName": "Semantic Code Knowledge Graph",
   "description": "Local knowledge graph of your codebase exposed to AI via MCP",
   "version": "0.2.0",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other", "Programming Languages"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "semanticKG.rebuildGraph",         "title": "Semantic KG: Rebuild Knowledge Graph" },
-      { "command": "semanticKG.openGraphExplorer",    "title": "Semantic KG: Open Graph Explorer" },
-      { "command": "semanticKG.suggestCommitMessage", "title": "Semantic KG: Suggest Commit Message" },
-      { "command": "semanticKG.runCommunityDetection","title": "Semantic KG: Run Community Detection" }
+      {
+        "command": "semanticKG.rebuildGraph",
+        "title": "Semantic KG: Rebuild Knowledge Graph"
+      },
+      {
+        "command": "semanticKG.openGraphExplorer",
+        "title": "Semantic KG: Open Graph Explorer"
+      },
+      {
+        "command": "semanticKG.suggestCommitMessage",
+        "title": "Semantic KG: Suggest Commit Message"
+      },
+      {
+        "command": "semanticKG.runCommunityDetection",
+        "title": "Semantic KG: Run Community Detection"
+      }
     ],
     "configuration": {
       "title": "Semantic Knowledge Graph",
       "properties": {
         "semanticKG.llmProvider": {
-          "type": "string", "enum": ["openai","anthropic","ollama"],
-          "default": "anthropic", "description": "LLM provider for docstring/commit generation"
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic",
+            "ollama"
+          ],
+          "default": "anthropic",
+          "description": "LLM provider for docstring/commit generation"
         },
-        "semanticKG.llmApiKey":   { "type": "string", "default": "", "description": "API key" },
-        "semanticKG.llmModel":    { "type": "string", "default": "claude-sonnet-4-20250514", "description": "Model name" },
-        "semanticKG.ollamaUrl":   { "type": "string", "default": "http://localhost:11434", "description": "Ollama URL" },
-        "semanticKG.mcpPort":     { "type": "number", "default": 3579, "description": "MCP server port" },
-        "semanticKG.uiPort":      { "type": "number", "default": 3580, "description": "Graph UI server port" },
-        "semanticKG.autoRebuildOnSave": { "type": "boolean", "default": true, "description": "Update graph on file save" },
+        "semanticKG.llmApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key"
+        },
+        "semanticKG.llmModel": {
+          "type": "string",
+          "default": "claude-sonnet-4-20250514",
+          "description": "Model name"
+        },
+        "semanticKG.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama URL"
+        },
+        "semanticKG.mcpPort": {
+          "type": "number",
+          "default": 3579,
+          "description": "MCP server port"
+        },
+        "semanticKG.uiPort": {
+          "type": "number",
+          "default": 3580,
+          "description": "Graph UI server port"
+        },
+        "semanticKG.autoRebuildOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update graph on file save"
+        },
         "semanticKG.excludePatterns": {
-          "type": "array", "items": { "type": "string" },
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "default": [
-            "**/node_modules/**", "**/.git/**", "**/dist/**", "**/out/**",
-            "**/__pycache__/**", "**/target/**", "**/build/**", "**/bin/**"
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/dist/**",
+            "**/out/**",
+            "**/__pycache__/**",
+            "**/target/**",
+            "**/build/**",
+            "**/bin/**"
           ]
         }
       }
@@ -44,22 +102,23 @@
     "lint": "eslint src --ext ts"
   },
   "dependencies": {
-    "sql.js": "^1.11.0",
-    "web-tree-sitter": "^0.22.6",
-    "express": "^4.18.2",
+    "@xenova/transformers": "^2.17.2",
     "cors": "^2.8.5",
-    "simple-git": "^3.22.0",
+    "express": "^4.18.2",
     "glob": "^10.3.10",
-    "minimatch": "^9.0.4"
+    "minimatch": "^9.0.4",
+    "simple-git": "^3.22.0",
+    "sql.js": "^1.11.0",
+    "web-tree-sitter": "^0.20.8"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/node": "^20.11.5",
-    "typescript": "^5.3.3",
+    "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
-    "eslint": "^8.56.0"
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
   }
 }

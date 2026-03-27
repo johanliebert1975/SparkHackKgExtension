@@ -177,6 +177,10 @@ async function runFullIndex(
     Logger.info('[Phase 2] Resolving CALL edges...');
     const callEdges = await callResolver.resolveWorkspace(store);
     store.upsertEdges(callEdges);
+    
+    // --> ADD THIS LINE TO FIX HERITAGE <--
+    await callResolver.resolveHeritage(store);
+    
     const stats2 = store.getStats();
     Logger.info(`[Phase 2] Done: ${callEdges.length} CALL edges added (total edges: ${stats2.edges})`);
 
@@ -191,6 +195,13 @@ async function runFullIndex(
     statusBar.setStatus('embedding');
     await embeddingEngine.generateMissingEmbeddings();
     Logger.info('[Phase 4] Done');
+
+    // --> ADD THIS ENTIRE BLOCK FOR DEVELOPER INTENT <--
+    // Phase 5 — Developer Intent (LLM Docstrings)
+    Logger.info('[Phase 5] Generating missing docstrings via LLM...');
+    statusBar.setStatus('thinking');
+    await embeddingEngine.generateMissingDocstrings();
+    Logger.info('[Phase 5] Done');
 
     store.persist();
 

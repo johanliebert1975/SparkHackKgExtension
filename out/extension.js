@@ -162,6 +162,8 @@ async function runFullIndex(workspaceRoot, parser, callResolver, communityDetect
         Logger_1.Logger.info('[Phase 2] Resolving CALL edges...');
         const callEdges = await callResolver.resolveWorkspace(store);
         store.upsertEdges(callEdges);
+        // --> ADD THIS LINE TO FIX HERITAGE <--
+        await callResolver.resolveHeritage(store);
         const stats2 = store.getStats();
         Logger_1.Logger.info(`[Phase 2] Done: ${callEdges.length} CALL edges added (total edges: ${stats2.edges})`);
         // Phase 3 — community detection
@@ -174,6 +176,12 @@ async function runFullIndex(workspaceRoot, parser, callResolver, communityDetect
         statusBar.setStatus('embedding');
         await embeddingEngine.generateMissingEmbeddings();
         Logger_1.Logger.info('[Phase 4] Done');
+        // --> ADD THIS ENTIRE BLOCK FOR DEVELOPER INTENT <--
+        // Phase 5 — Developer Intent (LLM Docstrings)
+        Logger_1.Logger.info('[Phase 5] Generating missing docstrings via LLM...');
+        statusBar.setStatus('thinking');
+        await embeddingEngine.generateMissingDocstrings();
+        Logger_1.Logger.info('[Phase 5] Done');
         store.persist();
     }
     catch (err) {

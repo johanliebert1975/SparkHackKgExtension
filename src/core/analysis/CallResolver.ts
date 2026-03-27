@@ -48,7 +48,8 @@ const CALL_EXPRESSION_TYPES = new Set([
 
 export class CallResolver {
   private readonly workspaceRoot: string;
-  private Parser: any = null;
+  private ParserClass: any = null;
+  private Language: any = null;
   private languages: Map<string, any> = new Map();
   private initialized = false;
 
@@ -59,18 +60,21 @@ export class CallResolver {
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
 
-    const ParserClass = require('web-tree-sitter');
+    const wasmPath = path.join(this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
+    const TreeSitter = require('web-tree-sitter');
 
-    // Emscripten deletes .init() after it runs successfully the first time.
-    // If it exists, load the WASM. If it's gone, it's already loaded!
-    if (typeof ParserClass.init === 'function') {
-      const wasmPath = path.join(
-        this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm'
-      );
-      await ParserClass.init({ locateFile: () => wasmPath });
+    try {
+        // If FileParser already ran .init(), it might be deleted. Only call if it exists.
+        if (typeof TreeSitter.init === 'function') {
+            await TreeSitter.init({ locateFile: () => wasmPath });
+        }
+    } catch (e) {
+        Logger.error(`CallResolver Tree-sitter init FATAL: ${e}`);
+        throw e;
     }
 
-    this.Parser = ParserClass;
+    this.ParserClass = TreeSitter;
+    this.Language = TreeSitter.Language;
     this.initialized = true;
   }
 
@@ -215,7 +219,7 @@ export class CallResolver {
     // Try tree-sitter; fallback to regex
     try {
       const language = await this.loadLanguage(langName);
-      const parser   = new this.Parser();
+      const parser   = new this.ParserClass();
       parser.setLanguage(language);
       const tree = parser.parse(code);
 
@@ -233,6 +237,11 @@ export class CallResolver {
 
   private async loadLanguage(langName: string): Promise<any> {
     if (this.languages.has(langName)) return this.languages.get(langName);
+    
+    if (!this.Language) {
+        throw new Error("CallResolver: Tree-sitter Language class is missing.");
+    }
+
     const GRAMMAR_MAP: Record<string, string> = {
       typescript: 'tree-sitter-typescript.wasm',
       javascript: 'tree-sitter-javascript.wasm',
@@ -244,9 +253,23 @@ export class CallResolver {
     };
     const p = path.join(this.extensionRoot, 'grammars', GRAMMAR_MAP[langName] ?? '');
     if (!fs.existsSync(p)) throw new Error(`Grammar not found for ${langName}`);
-    const lang = await this.Parser.Language.load(p);
-    this.languages.set(langName, lang);
-    return lang;
+
+    // FIX: Read as raw bytes just like FileParser
+    const bytes = fs.readFileSync(p);
+    const uint8Array = new Uint8Array(bytes);
+
+    try {
+        const loaded = await this.Language.load(uint8Array);
+        let lang = loaded;
+        if (langName === 'typescript' && loaded && loaded.typescript) {
+            lang = loaded.typescript;
+        }
+        this.languages.set(langName, lang);
+        return lang;
+    } catch (err) {
+        Logger.error(`CallResolver WASM Load failed for ${langName}: ${err}`);
+        throw err;
+    }
   }
 
   // ── AST walk for call expressions ──────────────────────────────────────────
@@ -386,6 +409,41 @@ export class CallResolver {
         added.add(key);
         edges.push({ sourceId: caller.id, targetId: calleeId, relationType: 'CALLS' });
       }
+    }
+  }
+
+  /**
+   * Sweeps through all EXTENDS/IMPLEMENTS edges and resolves cross-file targets
+   * by matching the unresolved interface/class name against the global symbol table.
+   */
+  async resolveHeritage(store: GraphStore): Promise<void> {
+    const nodes = store.getAllNodes();
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const symbolTable = this.buildSymbolTable(store);
+
+    const heritageEdges = [...store.getEdgesByType('EXTENDS'), ...store.getEdgesByType('IMPLEMENTS')];
+    const validEdges: CodeEdge[] = [];
+
+    for (const edge of heritageEdges) {
+      if (nodeIds.has(edge.targetId)) continue; // Already valid (same file)
+
+      // The unresolved targetId looks like "src/view/ConsoleViewImpl.java:ConsoleView"
+      const name = edge.targetId.split(':').pop();
+      if (!name) continue;
+
+      const candidates = symbolTable.get(name);
+      if (candidates && candidates.length > 0) {
+        validEdges.push({
+          sourceId: edge.sourceId,
+          targetId: candidates[0].id, // Connect to the actual cross-file node
+          relationType: edge.relationType
+        });
+      }
+    }
+
+    if (validEdges.length > 0) {
+      store.upsertEdges(validEdges);
+      Logger.info(`CallResolver: ${validEdges.length} cross-file EXTENDS/IMPLEMENTS edges resolved`);
     }
   }
 }

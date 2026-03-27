@@ -33,6 +33,17 @@ const LANGUAGE_MAP: Record<string, { exts: string[]; grammar: string }> = {
   cpp:         { exts: ['.cpp','.cc','.cxx','.h','.hpp','.c'], grammar: 'tree-sitter-cpp.wasm' },
 };
 
+// ── DEBUG HANG DETECTOR ──────────────────────────────────────────────────────
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error(`[HANG DETECTED] ${label} froze for ${ms}ms!`)), ms)
+    )
+  ]);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Per-language AST node type sets ──────────────────────────────────────────
 
 const CLASS_NODE_TYPES = new Set([
@@ -82,7 +93,8 @@ export interface ParseResult {
 export class FileParser {
   private readonly workspaceRoot: string;
   private readonly extensionRoot: string;
-  private Parser: any = null;
+  private ParserClass: any = null;   // The Parser constructor
+  private Language: any = null;      // The Language static class (stored separately)
   private languages: Map<string, any> = new Map();
   private initialized = false;
 
@@ -94,19 +106,36 @@ export class FileParser {
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
 
-    const ParserClass = require('web-tree-sitter');
-
-    // Emscripten deletes .init() after it runs successfully the first time.
-    // If it exists, load the WASM. If it's gone, it's already loaded!
-    if (typeof ParserClass.init === 'function') {
-      const wasmPath = path.join(
-        this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm'
-      );
-      await ParserClass.init({ locateFile: () => wasmPath });
+    Logger.info(`[DEBUG] ensureInitialized() started`);
+    const wasmPath = path.join(this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
+    
+    Logger.info(`[DEBUG] Checking for main tree-sitter.wasm at: ${wasmPath}`);
+    if (!fs.existsSync(wasmPath)) {
+      throw new Error(`[DEBUG] Main WASM engine missing at ${wasmPath}`);
     }
 
-    this.Parser = ParserClass;
+    Logger.info(`[DEBUG] Requiring web-tree-sitter module...`);
+    const TreeSitter = require('web-tree-sitter');
+
+    try {
+        Logger.info(`[DEBUG] Awaiting TreeSitter.init()...`);
+        // Wrap init in a 5-second timeout to catch hangs
+        await withTimeout(TreeSitter.init({ locateFile: () => wasmPath }), 5000, "TreeSitter.init()");
+        Logger.info(`[DEBUG] TreeSitter.init() completed successfully.`);
+        
+        if (!(TreeSitter as any).Language) {
+             Logger.warn("[DEBUG] Tree-sitter init finished but Language class is missing on the object!");
+        }
+
+    } catch (e) {
+        Logger.error(`[DEBUG] Tree-sitter init FATAL ERROR: ${e}`);
+        throw e;
+    }
+
+    this.ParserClass = TreeSitter;
+    this.Language = TreeSitter.Language;
     this.initialized = true;
+    Logger.info(`[DEBUG] ensureInitialized() completed`);
   }
 
   // ── Workspace parse ────────────────────────────────────────────────────────
@@ -183,29 +212,81 @@ export class FileParser {
     });
 
     try {
+      // DEBUG: Log which grammar we are trying to load
+      Logger.info(`Loading grammar for ${langName} from ${langConfig.grammar}`);
+      
       const language = await this.loadLanguage(langName, langConfig.grammar);
-      const parser   = new this.Parser();
-      parser.setLanguage(language);
+      
+      // DEBUG: Check if language object is valid before passing to parser
+      if (!language) {
+        throw new Error(`loadLanguage returned null for ${langName}`);
+      }
+
+      const parser = new this.ParserClass();
+      
+      // DEBUG: This is often where the 'loadWebAssemblyModule' error triggers
+      Logger.info(`Setting language for parser...`);
+      parser.setLanguage(language); 
+      
       const tree = parser.parse(code);
       this.walkTree(tree.rootNode, code, lines, filePath, relPath, pkgName, nodes, edges);
       tree.delete();
     } catch (err) {
-      Logger.warn(`Tree-sitter failed for ${relPath}, using regex: ${err}`);
+      // This will now catch the loadWebAssemblyModule error and give us context
+      Logger.error(`Tree-sitter parse execution failed for ${relPath}: ${err}`);
+      Logger.warn(`Falling back to regex for ${relPath}`);
       this.regexFallback(code, filePath, relPath, pkgName, nodes, edges);
     }
 
     return { nodes, edges };
   }
 
-  private async loadLanguage(langName: string, grammarFile: string): Promise<any> {
+private async loadLanguage(langName: string, grammarFile: string): Promise<any> {
     if (this.languages.has(langName)) return this.languages.get(langName);
-    const p = path.join(this.extensionRoot, 'grammars', grammarFile);
-    if (!fs.existsSync(p)) throw new Error(`Grammar not found: ${p}`);
-    const lang = await this.Parser.Language.load(p);
-    this.languages.set(langName, lang);
-    return lang;
-  }
+    
+    Logger.info(`[DEBUG] loadLanguage() called for: ${langName}`);
 
+    if (!this.Language) {
+        throw new Error("[DEBUG] Attempted to load language before Tree-sitter engine was initialized.");
+    }
+
+    const grammarPath = path.join(this.extensionRoot, 'grammars', grammarFile);
+    Logger.info(`[DEBUG] Checking grammar file at: ${grammarPath}`);
+    
+    if (!fs.existsSync(grammarPath)) {
+        throw new Error(`[DEBUG] Grammar not found: ${grammarPath}`);
+    }
+
+    Logger.info(`[DEBUG] Reading raw bytes from ${grammarFile}...`);
+    const bytes = fs.readFileSync(grammarPath);
+    Logger.info(`[DEBUG] Read ${bytes.length} bytes for ${langName}. Converting to Uint8Array...`);
+    const uint8Array = new Uint8Array(bytes);
+
+    try {
+        Logger.info(`[DEBUG] Awaiting this.Language.load() for ${langName}...`);
+        
+        // Wrap grammar loading in a 3-second timeout! 
+        // THIS IS WHERE IT IS LIKELY HANGING.
+        const loaded = await withTimeout(
+          this.Language.load(uint8Array), 
+          3000, 
+          `Language.load(${langName})`
+        );
+        
+        Logger.info(`[DEBUG] this.Language.load() completed for ${langName}`);
+        
+        let lang = loaded;
+        if (langName === 'typescript' && loaded && (loaded as any).typescript) {
+            lang = (loaded as any).typescript;
+        }
+
+        this.languages.set(langName, lang);
+        return lang;
+    } catch (err) {
+        Logger.error(`[DEBUG] WASM Load failed for ${langName}: ${err}`);
+        throw err;
+    }
+  }
   // ── AST walker ─────────────────────────────────────────────────────────────
 
   private walkTree(

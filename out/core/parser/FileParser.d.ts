@@ -23,7 +23,8 @@ export interface ParseResult {
 export declare class FileParser {
     private readonly workspaceRoot;
     private readonly extensionRoot;
-    private Parser;
+    private ParserClass;
+    private Language;
     private languages;
     private initialized;
     constructor(workspaceRoot: string, extensionRoot: string);

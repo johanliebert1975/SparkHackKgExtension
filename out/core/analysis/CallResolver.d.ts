@@ -24,7 +24,8 @@ import { GraphStore, CodeEdge } from '../graph/GraphStore';
 export declare class CallResolver {
     private readonly extensionRoot;
     private readonly workspaceRoot;
-    private Parser;
+    private ParserClass;
+    private Language;
     private languages;
     private initialized;
     constructor(workspaceRoot: string, extensionRoot: string);
@@ -53,4 +54,9 @@ export declare class CallResolver {
      */
     private resolveCallee;
     private regexCallFallback;
+    /**
+     * Sweeps through all EXTENDS/IMPLEMENTS edges and resolves cross-file targets
+     * by matching the unresolved interface/class name against the global symbol table.
+     */
+    resolveHeritage(store: GraphStore): Promise<void>;
 }

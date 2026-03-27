@@ -80,7 +80,8 @@ const CALL_EXPRESSION_TYPES = new Set([
 class CallResolver {
     constructor(workspaceRoot, extensionRoot) {
         this.extensionRoot = extensionRoot;
-        this.Parser = null;
+        this.ParserClass = null;
+        this.Language = null;
         this.languages = new Map();
         this.initialized = false;
         this.workspaceRoot = workspaceRoot;
@@ -88,14 +89,20 @@ class CallResolver {
     async ensureInitialized() {
         if (this.initialized)
             return;
-        const ParserClass = require('web-tree-sitter');
-        // Emscripten deletes .init() after it runs successfully the first time.
-        // If it exists, load the WASM. If it's gone, it's already loaded!
-        if (typeof ParserClass.init === 'function') {
-            const wasmPath = path.join(this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
-            await ParserClass.init({ locateFile: () => wasmPath });
+        const wasmPath = path.join(this.extensionRoot, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm');
+        const TreeSitter = require('web-tree-sitter');
+        try {
+            // If FileParser already ran .init(), it might be deleted. Only call if it exists.
+            if (typeof TreeSitter.init === 'function') {
+                await TreeSitter.init({ locateFile: () => wasmPath });
+            }
         }
-        this.Parser = ParserClass;
+        catch (e) {
+            Logger_1.Logger.error(`CallResolver Tree-sitter init FATAL: ${e}`);
+            throw e;
+        }
+        this.ParserClass = TreeSitter;
+        this.Language = TreeSitter.Language;
         this.initialized = true;
     }
     /**
@@ -227,7 +234,7 @@ class CallResolver {
         // Try tree-sitter; fallback to regex
         try {
             const language = await this.loadLanguage(langName);
-            const parser = new this.Parser();
+            const parser = new this.ParserClass();
             parser.setLanguage(language);
             const tree = parser.parse(code);
             this.walkForCalls(tree.rootNode, code, relPath, filePath, nodesInFile, localSymbols, symbolTable, importMap, edges);
@@ -241,6 +248,9 @@ class CallResolver {
     async loadLanguage(langName) {
         if (this.languages.has(langName))
             return this.languages.get(langName);
+        if (!this.Language) {
+            throw new Error("CallResolver: Tree-sitter Language class is missing.");
+        }
         const GRAMMAR_MAP = {
             typescript: 'tree-sitter-typescript.wasm',
             javascript: 'tree-sitter-javascript.wasm',
@@ -253,9 +263,22 @@ class CallResolver {
         const p = path.join(this.extensionRoot, 'grammars', GRAMMAR_MAP[langName] ?? '');
         if (!fs.existsSync(p))
             throw new Error(`Grammar not found for ${langName}`);
-        const lang = await this.Parser.Language.load(p);
-        this.languages.set(langName, lang);
-        return lang;
+        // FIX: Read as raw bytes just like FileParser
+        const bytes = fs.readFileSync(p);
+        const uint8Array = new Uint8Array(bytes);
+        try {
+            const loaded = await this.Language.load(uint8Array);
+            let lang = loaded;
+            if (langName === 'typescript' && loaded && loaded.typescript) {
+                lang = loaded.typescript;
+            }
+            this.languages.set(langName, lang);
+            return lang;
+        }
+        catch (err) {
+            Logger_1.Logger.error(`CallResolver WASM Load failed for ${langName}: ${err}`);
+            throw err;
+        }
     }
     // ── AST walk for call expressions ──────────────────────────────────────────
     walkForCalls(rootNode, code, relPath, filePath, nodesInFile, localSymbols, symbolTable, importMap, edges) {
@@ -359,6 +382,37 @@ class CallResolver {
                 added.add(key);
                 edges.push({ sourceId: caller.id, targetId: calleeId, relationType: 'CALLS' });
             }
+        }
+    }
+    /**
+     * Sweeps through all EXTENDS/IMPLEMENTS edges and resolves cross-file targets
+     * by matching the unresolved interface/class name against the global symbol table.
+     */
+    async resolveHeritage(store) {
+        const nodes = store.getAllNodes();
+        const nodeIds = new Set(nodes.map(n => n.id));
+        const symbolTable = this.buildSymbolTable(store);
+        const heritageEdges = [...store.getEdgesByType('EXTENDS'), ...store.getEdgesByType('IMPLEMENTS')];
+        const validEdges = [];
+        for (const edge of heritageEdges) {
+            if (nodeIds.has(edge.targetId))
+                continue; // Already valid (same file)
+            // The unresolved targetId looks like "src/view/ConsoleViewImpl.java:ConsoleView"
+            const name = edge.targetId.split(':').pop();
+            if (!name)
+                continue;
+            const candidates = symbolTable.get(name);
+            if (candidates && candidates.length > 0) {
+                validEdges.push({
+                    sourceId: edge.sourceId,
+                    targetId: candidates[0].id, // Connect to the actual cross-file node
+                    relationType: edge.relationType
+                });
+            }
+        }
+        if (validEdges.length > 0) {
+            store.upsertEdges(validEdges);
+            Logger_1.Logger.info(`CallResolver: ${validEdges.length} cross-file EXTENDS/IMPLEMENTS edges resolved`);
         }
     }
 }
