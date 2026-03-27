@@ -16,9 +16,15 @@ import { IndexingStatusBar } from './utils/StatusBar';
 import { Logger } from './utils/Logger';
 import { ContextInspectorPanel } from './ui/panels/ContextInspectorPanel';
 
+// Chat Imports
+import { LLMClient } from './core/mcp/LLMClient';
+import { CodeChatAgent } from './core/chat/CodeChatAgent';
+import { ChatUIServer } from './ui/ChatUIServer';
+
 let graphStore: GraphStore | null = null;
 let mcpServer: MCPServer | null = null;
 let uiServer: GraphUIServer | null = null;
+let chatUiServer: ChatUIServer | null = null;
 let statusBar: IndexingStatusBar | null = null;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -53,8 +59,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     embeddingEngine, graphStore, statusBar
   );
 
-// ── MCP server ────────────────────────────────────────────────────────────
   const config  = vscode.workspace.getConfiguration('semanticKG');
+  
+  // ── RAG Chat Agent Setup ──────────────────────────────────────────────────
+  const provider  = config.get<string>('llmProvider', 'gemini');
+  const apiKey    = config.get<string>('llmApiKey', '');
+  const model     = config.get<string>('llmModel', 'gemini-2.0-flash');
+  const ollamaUrl = config.get<string>('ollamaUrl', 'http://localhost:11434');
+
+  const llmClient = new LLMClient(provider, apiKey, model, ollamaUrl);
+  const chatAgent = new CodeChatAgent(graphStore, embeddingEngine, llmClient);
+
+  // ── External Chat UI Server ───────────────────────────────────────────────
+  const chatUiPort: number = config.get('chatUiPort', 3581);
+  chatUiServer = new ChatUIServer(chatAgent, chatUiPort);
+  chatUiServer.start();
+  Logger.info(`Chat UI   → http://localhost:${chatUiPort}`);
+
+  // ── MCP server ────────────────────────────────────────────────────────────
   const mcpPort: number = config.get('mcpPort', 3579);
   mcpServer = new MCPServer(graphStore, embeddingEngine, mcpPort);
   await mcpServer.start();
@@ -76,14 +98,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   uiServer = new GraphUIServer(graphStore, uiPort);
   uiServer.start();
   Logger.info(`Graph UI  → http://localhost:${uiPort}`);
-  vscode.window.showInformationMessage(
-    `Knowledge Graph ready! Open http://localhost:${uiPort} to explore.`,
-    'Open in Browser'
-  ).then(action => {
-    if (action === 'Open in Browser') {
-      vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${uiPort}`));
-    }
-  });
 
   // ── File watcher ──────────────────────────────────────────────────────────
   const autoRebuild: boolean = config.get('autoRebuildOnSave', true);
@@ -103,6 +117,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ── Subscriptions / cleanup ───────────────────────────────────────────────
   context.subscriptions.push({ dispose: () => uiServer?.stop() });
+  context.subscriptions.push({ dispose: () => chatUiServer?.stop() });
 
   // ── Commands ──────────────────────────────────────────────────────────────
   context.subscriptions.push(
@@ -117,6 +132,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('semanticKG.openGraphExplorer', () => {
       vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${uiPort}`));
+    }),
+
+    vscode.commands.registerCommand('semanticKG.openChatUI', () => {
+      vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${chatUiPort}`));
     }),
 
     vscode.commands.registerCommand('semanticKG.runCommunityDetection', async () => {
@@ -156,12 +175,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   Logger.info('Semantic Knowledge Graph extension active ✓');
 }
 
-// ── Full index pipeline ────────────────────────────────────────────────────────
-// Phase 1: Parse → nodes + structural edges (CONTAINS, EXTENDS, IMPLEMENTS)
-// Phase 2: Resolve CALL edges
-// Phase 3: Community detection
-// Phase 4: Generate embeddings for missing nodes
-
 async function runFullIndex(
   workspaceRoot:     string,
   parser:            FileParser,
@@ -174,48 +187,29 @@ async function runFullIndex(
   statusBar.setStatus('indexing');
 
   try {
-    // Phase 1 — symbol extraction
     Logger.info('[Phase 1] Parsing workspace symbols...');
     const { nodes, edges: structuralEdges } = await parser.parseWorkspace();
     await store.upsertNodes(nodes);
     store.upsertEdges(structuralEdges);
-    const stats1 = store.getStats();
-    Logger.info(
-      `[Phase 1] Done: ${stats1.nodes} nodes, ${stats1.edges} structural edges. ` +
-      `By type: ${JSON.stringify(stats1.byType)}`
-    );
-
-    // Phase 2 — CALL edge resolution
+    
     Logger.info('[Phase 2] Resolving CALL edges...');
     const callEdges = await callResolver.resolveWorkspace(store);
     store.upsertEdges(callEdges);
-    
-    // --> ADD THIS LINE TO FIX HERITAGE <--
     await callResolver.resolveHeritage(store);
     
-    const stats2 = store.getStats();
-    Logger.info(`[Phase 2] Done: ${callEdges.length} CALL edges added (total edges: ${stats2.edges})`);
-
-    // Phase 3 — community detection
     Logger.info('[Phase 3] Running community detection...');
     statusBar.setStatus('thinking');
     await communityDetector.detect();
-    Logger.info('[Phase 3] Done');
 
-    // Phase 4 — embeddings
     Logger.info('[Phase 4] Generating embeddings...');
     statusBar.setStatus('embedding');
     await embeddingEngine.generateMissingEmbeddings();
-    Logger.info('[Phase 4] Done');
 
-    // --> ADD THIS ENTIRE BLOCK FOR DEVELOPER INTENT <--
-    // Phase 5 — Developer Intent (LLM Docstrings)
-    Logger.info('[Phase 5] Generating missing docstrings via LLM...');
-    statusBar.setStatus('thinking');
-    await embeddingEngine.generateMissingDocstrings();
-    Logger.info('[Phase 5] Done');
+    // Logger.info('[Phase 5] Generating missing docstrings via LLM...');
+    // await embeddingEngine.generateMissingDocstrings();
 
     store.persist();
+    Logger.info('Indexing pipeline complete');
 
   } catch (err) {
     Logger.error('Full index failed', err);
@@ -224,8 +218,6 @@ async function runFullIndex(
     statusBar.setStatus('idle');
   }
 }
-
-// ── Incremental update on file save ───────────────────────────────────────────
 
 async function onFileChanged(
   uri:            vscode.Uri,
@@ -241,7 +233,6 @@ async function onFileChanged(
     await store.upsertNodes(nodes);
     store.upsertEdges(structuralEdges);
 
-    // Re-resolve CALL edges only for this file
     const callEdges = await callResolver.resolveWorkspace(store);
     store.upsertEdges(callEdges);
 
@@ -257,6 +248,7 @@ async function onFileChanged(
 export function deactivate(): void {
   mcpServer?.stop();
   uiServer?.stop();
+  chatUiServer?.stop();
   graphStore?.close();
   Logger.info('Semantic Knowledge Graph extension deactivated.');
 }

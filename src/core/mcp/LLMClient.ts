@@ -1,6 +1,6 @@
 /**
- * LLMClient — thin wrapper over OpenAI, Anthropic, and Ollama APIs.
- * Used for docstring generation and commit message generation.
+ * LLMClient — thin wrapper over OpenAI, Anthropic, Ollama, Gemini, and Groq APIs.
+ * Used for docstring generation, commit message generation, and chat.
  */
 
 import * as https from 'https';
@@ -16,11 +16,64 @@ export class LLMClient {
   ) {}
 
   async complete(prompt: string, maxTokens = 500): Promise<string> {
+    if (!this.apiKey && this.provider !== 'ollama') {
+      throw new Error(`API key is missing for provider: ${this.provider}`);
+    }
+
     switch (this.provider) {
       case 'anthropic': return this.anthropic(prompt, maxTokens);
       case 'openai':    return this.openai(prompt, maxTokens);
       case 'ollama':    return this.ollama(prompt, maxTokens);
+      case 'gemini':    return this.gemini(prompt, maxTokens);
+      case 'groq':      return this.groq(prompt, maxTokens); // <-- Added Groq
       default:          throw new Error(`Unknown LLM provider: ${this.provider}`);
+    }
+  }
+  
+  // ── Groq ───────────────────────────────────────────────────────────────────
+
+  private async groq(prompt: string, maxTokens: number): Promise<string> {
+    const body = JSON.stringify({
+      model: this.model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    // Groq uses the exact same payload structure as OpenAI!
+    const res = await this.post('https://api.groq.com/openai/v1/chat/completions', body, {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.apiKey}`,
+    });
+
+    const json = JSON.parse(res);
+    if (json.error) {
+      throw new Error(json.error.message || json.error);
+    }
+    return json.choices?.[0]?.message?.content ?? '';
+  }
+
+  // ── Gemini ─────────────────────────────────────────────────────────────────
+
+  private async gemini(prompt: string, maxTokens: number): Promise<string> {
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens }
+    });
+
+    const url = `https://generativelanguage.googleapis.com/v1/models/${this.model}:generateContent?key=${this.apiKey}`;
+    
+    try {
+      const res = await this.post(url, body, { 'Content-Type': 'application/json' });
+      const json = JSON.parse(res);
+      
+      if (json.error) {
+        throw new Error(json.error.message);
+      }
+
+      return json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    } catch (err) {
+      Logger.error(`[LLMClient] Gemini API error: ${err}`);
+      throw err;
     }
   }
 

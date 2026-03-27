@@ -1,7 +1,7 @@
 "use strict";
 /**
- * LLMClient — thin wrapper over OpenAI, Anthropic, and Ollama APIs.
- * Used for docstring generation and commit message generation.
+ * LLMClient — thin wrapper over OpenAI, Anthropic, Ollama, Gemini, and Groq APIs.
+ * Used for docstring generation, commit message generation, and chat.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -40,6 +40,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LLMClient = void 0;
 const https = __importStar(require("https"));
 const http = __importStar(require("http"));
+const Logger_1 = require("../../utils/Logger");
 class LLMClient {
     constructor(provider, apiKey, model, ollamaUrl = 'http://localhost:11434') {
         this.provider = provider;
@@ -48,11 +49,54 @@ class LLMClient {
         this.ollamaUrl = ollamaUrl;
     }
     async complete(prompt, maxTokens = 500) {
+        if (!this.apiKey && this.provider !== 'ollama') {
+            throw new Error(`API key is missing for provider: ${this.provider}`);
+        }
         switch (this.provider) {
             case 'anthropic': return this.anthropic(prompt, maxTokens);
             case 'openai': return this.openai(prompt, maxTokens);
             case 'ollama': return this.ollama(prompt, maxTokens);
+            case 'gemini': return this.gemini(prompt, maxTokens);
+            case 'groq': return this.groq(prompt, maxTokens); // <-- Added Groq
             default: throw new Error(`Unknown LLM provider: ${this.provider}`);
+        }
+    }
+    // ── Groq ───────────────────────────────────────────────────────────────────
+    async groq(prompt, maxTokens) {
+        const body = JSON.stringify({
+            model: this.model,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: prompt }],
+        });
+        // Groq uses the exact same payload structure as OpenAI!
+        const res = await this.post('https://api.groq.com/openai/v1/chat/completions', body, {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+        });
+        const json = JSON.parse(res);
+        if (json.error) {
+            throw new Error(json.error.message || json.error);
+        }
+        return json.choices?.[0]?.message?.content ?? '';
+    }
+    // ── Gemini ─────────────────────────────────────────────────────────────────
+    async gemini(prompt, maxTokens) {
+        const body = JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: maxTokens }
+        });
+        const url = `https://generativelanguage.googleapis.com/v1/models/${this.model}:generateContent?key=${this.apiKey}`;
+        try {
+            const res = await this.post(url, body, { 'Content-Type': 'application/json' });
+            const json = JSON.parse(res);
+            if (json.error) {
+                throw new Error(json.error.message);
+            }
+            return json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        }
+        catch (err) {
+            Logger_1.Logger.error(`[LLMClient] Gemini API error: ${err}`);
+            throw err;
         }
     }
     // ── Anthropic ──────────────────────────────────────────────────────────────
