@@ -62,17 +62,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const config  = vscode.workspace.getConfiguration('semanticKG');
   
   // ── RAG Chat Agent Setup ──────────────────────────────────────────────────
-  const provider  = config.get<string>('llmProvider', 'gemini');
+  const provider  = config.get<string>('llmProvider', 'groq');
   const apiKey    = config.get<string>('llmApiKey', '');
-  const model     = config.get<string>('llmModel', 'gemini-2.0-flash');
+  const model     = config.get<string>('llmModel', 'llama-3.3-70b-versatile');
   const ollamaUrl = config.get<string>('ollamaUrl', 'http://localhost:11434');
 
   const llmClient = new LLMClient(provider, apiKey, model, ollamaUrl);
-  const chatAgent = new CodeChatAgent(graphStore, embeddingEngine, llmClient);
+  
+  // PASS WORKSPACE ROOT HERE
+  const chatAgent = new CodeChatAgent(graphStore, embeddingEngine, llmClient, workspaceRoot);
 
   // ── External Chat UI Server ───────────────────────────────────────────────
   const chatUiPort: number = config.get('chatUiPort', 3581);
-  chatUiServer = new ChatUIServer(chatAgent, chatUiPort);
+  
+  // PASS WORKSPACE ROOT HERE
+  chatUiServer = new ChatUIServer(chatAgent, chatUiPort, workspaceRoot);
   chatUiServer.start();
   Logger.info(`Chat UI   → http://localhost:${chatUiPort}`);
 

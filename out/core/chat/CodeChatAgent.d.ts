@@ -13,6 +13,7 @@ export declare class CodeChatAgent {
     private readonly graphStore;
     private readonly embeddingEngine;
     private readonly llmClient;
-    constructor(graphStore: GraphStore, embeddingEngine: EmbeddingEngine, llmClient: LLMClient);
+    private readonly workspaceRoot;
+    constructor(graphStore: GraphStore, embeddingEngine: EmbeddingEngine, llmClient: LLMClient, workspaceRoot: string);
     askQuery(userQuery: string): Promise<ChatResponse>;
 }

@@ -85,15 +85,17 @@ async function activate(context) {
     await runFullIndex(workspaceRoot, parser, callResolver, communityDetector, embeddingEngine, graphStore, statusBar);
     const config = vscode.workspace.getConfiguration('semanticKG');
     // ── RAG Chat Agent Setup ──────────────────────────────────────────────────
-    const provider = config.get('llmProvider', 'gemini');
+    const provider = config.get('llmProvider', 'groq');
     const apiKey = config.get('llmApiKey', '');
-    const model = config.get('llmModel', 'gemini-2.0-flash');
+    const model = config.get('llmModel', 'llama-3.3-70b-versatile');
     const ollamaUrl = config.get('ollamaUrl', 'http://localhost:11434');
     const llmClient = new LLMClient_1.LLMClient(provider, apiKey, model, ollamaUrl);
-    const chatAgent = new CodeChatAgent_1.CodeChatAgent(graphStore, embeddingEngine, llmClient);
+    // PASS WORKSPACE ROOT HERE
+    const chatAgent = new CodeChatAgent_1.CodeChatAgent(graphStore, embeddingEngine, llmClient, workspaceRoot);
     // ── External Chat UI Server ───────────────────────────────────────────────
     const chatUiPort = config.get('chatUiPort', 3581);
-    chatUiServer = new ChatUIServer_1.ChatUIServer(chatAgent, chatUiPort);
+    // PASS WORKSPACE ROOT HERE
+    chatUiServer = new ChatUIServer_1.ChatUIServer(chatAgent, chatUiPort, workspaceRoot);
     chatUiServer.start();
     Logger_1.Logger.info(`Chat UI   → http://localhost:${chatUiPort}`);
     // ── MCP server ────────────────────────────────────────────────────────────
