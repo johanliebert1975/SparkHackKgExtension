@@ -83,8 +83,10 @@ class GraphUIServer {
                 const node = this.store.getNode(id);
                 const neighbours = node ? this.store.getNeighbours(id) : { callers: [], callees: [] };
                 const blast = node ? this.store.getBlastRadius(id, 3) : [];
+                // Fetch the link using the method we added to GraphStore
+                const editorLink = node ? this.store.getNodeEditorLink(id, 'vscode') : null;
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ node, neighbours, blast }));
+                res.end(JSON.stringify({ node, neighbours, blast, editorLink }));
                 return;
             }
             res.writeHead(404);
@@ -200,6 +202,26 @@ class GraphUIServer {
   .row-val { color: var(--text); word-break: break-all; }
   .row-val.code { background: var(--bg); padding: 4px 6px; border-radius: 3px; color: var(--green); }
   .row-val.doc { color: var(--muted); font-style: italic; }
+
+  .open-editor-btn {
+    display: block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    padding: 6px 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 10px;
+    margin-top: 12px;
+    text-align: center;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .open-editor-btn:hover {
+    background: var(--border);
+    color: #fff;
+  }
 
   .section-title { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 5px; }
   .chip {
@@ -493,7 +515,7 @@ function renderGraph() {
 function selectNode(id) {
   fetch('/api/node/' + encodeURIComponent(id))
     .then(r => r.json())
-    .then(({ node, neighbours, blast }) => {
+    .then(({ node, neighbours, blast, editorLink }) => { // Extract editorLink
       if (!node) return;
 
       // Highlight: selected + callers + callees + blast (don't re-render, just update)
@@ -504,7 +526,7 @@ function selectNode(id) {
       ]);
       highlightedIds = ids;
       updateHighlighting();  // Update highlighting without full re-render
-      renderSidebar(node, neighbours, blast);
+      renderSidebar(node, neighbours, blast, editorLink); // Pass it to renderSidebar
     });
 }
 
@@ -676,7 +698,7 @@ function updateGraphFilters() {
   simulation.alpha(0.3).restart();
 }
 
-function renderSidebar(node, { callers, callees }, blast) {
+function renderSidebar(node, { callers, callees }, blast, editorLink) { // Add editorLink
   const typeColor = NODE_COLORS[node.type] ?? '#8b949e';
   const mods = (node.modifiers ?? []).join(' ');
 
@@ -692,6 +714,11 @@ function renderSidebar(node, { callers, callees }, blast) {
   if (node.communityId > 0) html += rowHtml('Community', '#' + node.communityId);
   if (node.signature) html += rowHtml('Signature', node.signature, 'code');
   if (node.docstring)  html += rowHtml('Intent',    node.docstring,  'doc');
+
+  // Add the button right before closing the .node-card div
+  if (editorLink) {
+    html += '<a href="' + esc(editorLink) + '" class="open-editor-btn">↗ Open in VS Code</a>';
+  }
 
   html += '</div>';
 
