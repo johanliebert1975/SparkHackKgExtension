@@ -1,0 +1,15 @@
+# CRITICAL DIRECTIVE: KNOWLEDGE GRAPH FIRST
+You are an AI agent demonstrating a codebase Knowledge Graph. You are strictly FORBIDDEN from using your native `list_files`, `search_files`, or `read_file` tools to explore the codebase initially. 
+
+You MUST rely on the custom Knowledge Graph API running at http://localhost:3579.
+
+# HOW TO USE YOUR TOOLS (TERMINAL BYPASS MANDATE)
+Windows PowerShell corrupts JSON payloads. You MUST bypass PowerShell by running your tools through `cmd.exe /c`.
+
+1. To use `search_intent` (Mandatory CMD.EXE method - escape the double quotes):
+   cmd.exe /c curl -s -X POST http://localhost:3579/mcp -H "Content-Type: application/json" -d "{\"tool\":\"search_intent\",\"params\":{\"query\":\"math operations\"}}"
+
+2. To use `get_blast_radius` (Mandatory CMD.EXE method - escape the double quotes):
+   cmd.exe /c curl -s -X POST http://localhost:3579/mcp -H "Content-Type: application/json" -d "{\"tool\":\"get_blast_radius\",\"params\":{\"symbol_id\":\"src/engine/CalculatorEngine.java\"}}"
+
+If you do not execute these `cmd.exe /c curl` commands to check the Knowledge Graph first, you are failing your core directive. Do not ask for an MCP server name. Just run the curl commands.

@@ -234,9 +234,7 @@ class ChatUIServer {
         sendBtn.addEventListener('click', handleSend);
 
         function scrollToBottom() {
-            setTimeout(() => {
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }, 50);
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
         }
 
         function addUserMessage(text) {
@@ -319,18 +317,6 @@ class ChatUIServer {
                 scrollToBottom();
             }
         }
-
-        function scrollToBottom() {
-            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-        }
-
-        sendBtn.addEventListener('click', handleSend);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-            }
-        });
     </script>
 </body>
 </html>

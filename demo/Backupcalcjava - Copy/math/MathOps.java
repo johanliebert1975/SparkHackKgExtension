@@ -13,12 +13,12 @@ public class MathOps {
     }
     
     public static double sqrt(double a) {
-        if (a < 0) throw new ArithmeticException("Cannot take square root of negative number");
+        if (a < 0) throw new ArithmeticException("Cannot calculate square root of negative number");
         return Math.sqrt(a);
     }
     
     public static double cuberoot(double a) {
-        return Math.cbrt(a);
+        return Math.sqrt(a);
     }
     
     public static double power(double a, double b) {
